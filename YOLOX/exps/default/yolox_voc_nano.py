@@ -53,6 +53,8 @@ class Exp(MyExp):
         self.model.head.initialize_biases(1e-2)
         return self.model
 
+
+
     def get_data_loader(self, batch_size, is_distributed, no_aug=False, cache_img=False):
         from yolox.data import (
             VOCDetection,
@@ -80,7 +82,7 @@ class Exp(MyExp):
                     hsv_prob=self.hsv_prob),
                 cache=cache_img,
             )
-
+        
         dataset = MosaicDetection(
             dataset,
             mosaic=not no_aug,
@@ -98,6 +100,7 @@ class Exp(MyExp):
             mosaic_prob=self.mosaic_prob,
             mixup_prob=self.mixup_prob,
         )
+        
 
         self.dataset = dataset
 
