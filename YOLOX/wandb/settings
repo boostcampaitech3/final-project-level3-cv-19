@@ -1,0 +1,5 @@
+[default]
+entity = next_level
+project = yolox_nano
+base_url = https://api.wandb.ai
+
