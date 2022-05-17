@@ -3,6 +3,7 @@
 # Copyright (c) Megvii Inc. All rights reserved.
 
 import contextlib
+from torchinfo import summary
 from copy import deepcopy
 from typing import Sequence
 
@@ -14,6 +15,7 @@ __all__ = [
     "fuse_conv_and_bn",
     "fuse_model",
     "get_model_info",
+    "get_model_summary",
     "replace_module",
     "freeze_module",
     "adjust_status",
@@ -29,6 +31,10 @@ def get_model_info(model: nn.Module, tsize: Sequence[int]) -> str:
     flops *= tsize[0] * tsize[1] / stride / stride * 2  # Gflops
     info = "Params: {:.2f}M, Gflops: {:.2f}".format(params, flops)
     return info, params, flops
+
+def get_model_summary(model: nn.Module, tsize: Sequence[int]) -> str:
+    stride = 64
+    return summary(model, input_size=(16,3,stride,stride))
 
 
 def fuse_conv_and_bn(conv: nn.Conv2d, bn: nn.BatchNorm2d) -> nn.Conv2d:
