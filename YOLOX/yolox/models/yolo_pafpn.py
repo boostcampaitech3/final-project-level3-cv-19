@@ -17,12 +17,12 @@ class YOLOPAFPN(nn.Module):
     def __init__(
         self,
         depth=1.0,
-        width=1.0,
+        width=1.0,  
         in_features=("dark3", "dark4", "dark5"),
         in_channels=[256, 512, 1024],
         depthwise=False,
         act="silu",
-    ):
+    ):# depth와 witdh 기준으로 모델이 구분됩니다. nano는 0.33,0.25네요. 따라서 model과 fpn구조도 input이 달라져서 고려해야합니다.
         super().__init__()
         self.backbone = CSPDarknet(depth, width, depthwise=depthwise, act=act)
         self.in_features = in_features
@@ -34,7 +34,7 @@ class YOLOPAFPN(nn.Module):
             int(in_channels[2] * width), int(in_channels[1] * width), 1, 1, act=act
         )
         self.C3_p4 = CSPLayer(
-            int(2 * in_channels[1] * width),
+            int(2 * in_channels[1] * width), #width = 0.25니 256이겠네요
             int(in_channels[1] * width),
             round(3 * depth),
             False,

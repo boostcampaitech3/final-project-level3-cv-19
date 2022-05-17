@@ -109,26 +109,26 @@ class CSPDarknet(nn.Module):
         assert out_features, "please provide output features of Darknet"
         self.out_features = out_features
         Conv = DWConv if depthwise else BaseConv
-
+        # depth와 witdh 기준으로 모델이 구분됩니다. nano는 0.33,0.25
         base_channels = int(wid_mul * 64)  # 64
         base_depth = max(round(dep_mul * 3), 1)  # 3
 
         # stem
         self.stem = Focus(3, base_channels, ksize=3, act=act) #RGB채널을 3 에서 12 대신 WH는 4분의 1영역으로
-        #그다음 64로 변경
-        #ouput 128*128
+        #그다음 16로 변경
+        # channel 16
         # dark2
         self.dark2 = nn.Sequential(
             Conv(base_channels, base_channels * 2, 3, 2, act=act), #박스 바깥의 conv
             CSPLayer( #하나의 블록 단위라고 생각 Notion의 박스쳐진 블록
-                base_channels * 2, #128
-                base_channels * 2,  #128
-                n=base_depth, #3 Resnet F(x) + x를 몇번 하느냐 입니다.
+                base_channels * 2, #32
+                base_channels * 2,  ##32
+                n=base_depth, #1 Resnet F(x) + x를 몇번 하느냐 입니다.. nano는 1
                 depthwise=depthwise,
                 act=act,
             ),
         )
-        #ouput 64*64
+        # channel 32
         # dark3
         self.dark3 = nn.Sequential(
             Conv(base_channels * 2, base_channels * 4, 3, 2, act=act),
@@ -140,7 +140,7 @@ class CSPDarknet(nn.Module):
                 act=act,
             ),
         )
-        #ouput 32*32
+        # channel 64
         # dark4
         self.dark4 = nn.Sequential(
             Conv(base_channels * 4, base_channels * 8, 3, 2, act=act),
@@ -152,7 +152,7 @@ class CSPDarknet(nn.Module):
                 act=act,
             ),
         )
-        #ouput 16*16
+        # channel 128
         # dark5
         self.dark5 = nn.Sequential(
             Conv(base_channels * 8, base_channels * 16, 3, 2, act=act),
