@@ -120,6 +120,7 @@ class CSPDarknet(nn.Module):
         # dark2
         self.dark2 = nn.Sequential(
             Conv(base_channels, base_channels * 2, 3, 2, act=act), #박스 바깥의 conv
+            
             CSPLayer( #하나의 블록 단위라고 생각 Notion의 박스쳐진 블록
                 base_channels * 2, #32
                 base_channels * 2,  #32
@@ -132,6 +133,7 @@ class CSPDarknet(nn.Module):
         # dark3
         self.dark3 = nn.Sequential(
             Conv(base_channels * 2, base_channels * 4, 3, 2, act=act),
+            
             CSPLayer(
                 base_channels * 4,
                 base_channels * 4,
@@ -144,7 +146,7 @@ class CSPDarknet(nn.Module):
         # dark4
         self.dark4 = nn.Sequential(
             Conv(base_channels * 4, base_channels * 8, 3, 2, act=act),
-            SPPBottleneck(base_channels * 8, base_channels * 16, activation=act),
+            
             CSPLayer(
                 base_channels * 8,
                 base_channels * 8,
