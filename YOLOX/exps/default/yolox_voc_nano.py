@@ -28,6 +28,8 @@ class Exp(MyExp):
 
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
 
+        self.name = "yolox_voc_nano"
+
     def get_model(self, sublinear=False):
 
         def init_yolo(M):

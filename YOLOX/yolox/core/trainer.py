@@ -133,9 +133,11 @@ class Trainer:
         # model related init
         torch.cuda.set_device(self.local_rank)
         model = self.exp.get_model()
+        model_info = get_model_info(model, self.exp.test_size)
         logger.info(
-            "Model Summary: {}".format(get_model_info(model, self.exp.test_size))
+            "Model Summary: {}".format(model_info[0])
         )
+
         model.to(self.device)
 
         # solver related init
@@ -183,8 +185,11 @@ class Trainer:
                 wandb_params = dict()
                 for k, v in zip(self.args.opts[0::2], self.args.opts[1::2]):
                     if k.startswith("wandb-"):
-                        wandb_params.update({k.lstrip("wandb-"): v})
-                self.wandb_logger = WandbLogger(config=vars(self.exp), **wandb_params)
+                        wandb_params.update({k.lstrip("wandb")[1:]: v})
+                wandb_configs = vars(self.exp)
+                wandb_configs = dict(wandb_configs, **{"Params": str(model_info[1]), "Gflops": str(model_info[2])})
+                wandb_params = dict({"name":wandb_configs["name"]},**wandb_params)
+                self.wandb_logger = WandbLogger(config=wandb_configs, **wandb_params)
             else:
                 raise ValueError("logger must be either 'tensorboard' or 'wandb'")
 
