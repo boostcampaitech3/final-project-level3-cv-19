@@ -172,13 +172,13 @@ class CSPLayer(nn.Module):
         module_list = [
             Bottleneck(
                 hidden_channels, hidden_channels, shortcut, 1.0, depthwise, act=act
-            )
+            ) # 이게 Resnet의 F(X) + x 입니다.
             for _ in range(n)
         ]
         self.m = nn.Sequential(*module_list)
 
     def forward(self, x):
-        x_1 = self.conv1(x)
+        x_1 = self.conv1(x) 
         x_2 = self.conv2(x)
         x_1 = self.m(x_1)
         x = torch.cat((x_1, x_2), dim=1)
