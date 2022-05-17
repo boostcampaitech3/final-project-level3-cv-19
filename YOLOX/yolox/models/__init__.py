@@ -9,3 +9,5 @@ from .yolo_fpn import YOLOFPN
 from .yolo_head import YOLOXHead
 from .yolo_pafpn import YOLOPAFPN
 from .yolox import YOLOX
+#from .yolox_kwon import YOLOX
+#from .yolo_pafpn_kwon import YOLOPAFPN

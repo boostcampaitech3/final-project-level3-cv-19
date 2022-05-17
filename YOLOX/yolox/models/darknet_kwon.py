@@ -135,7 +135,7 @@ class CSPDarknet(nn.Module):
             CSPLayer(
                 base_channels * 4,
                 base_channels * 4,
-                n=base_depth * 3,
+                n=base_depth * 8,
                 depthwise=depthwise,
                 act=act,
             ),
