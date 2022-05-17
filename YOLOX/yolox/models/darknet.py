@@ -30,30 +30,32 @@ class Darknet(nn.Module):
         assert out_features, "please provide output features of Darknet"
         self.out_features = out_features
         self.stem = nn.Sequential(
-            BaseConv(in_channels, stem_out_channels, ksize=3, stride=1, act="lrelu"),
-            *self.make_group_layer(stem_out_channels, num_blocks=1, stride=2),
-        )
+            BaseConv(in_channels, stem_out_channels, ksize=3, stride=1, act="lrelu"),#기본 구성 블럭, conv->bn->actFunc
+            *self.make_group_layer(stem_out_channels, num_blocks=1, stride=2), #리스트를 풀어주는 역할
+        #make_group_layer는 BaseConv와 ResLayer를 갖고있는데 Baseconv는 기본 블록의 단위(conv->bn->actFunc)이고 Reslayer는 Resnet의 그것을 함수로 정의한것
+        )# 채널 크기 32->64->32->64
+        #여기까지 Notion에 있는 1Xblcok 마무리
         in_channels = stem_out_channels * 2  # 64
 
         num_blocks = Darknet.depth2blocks[depth]
         # create darknet with `stem_out_channels` and `num_blocks` layers.
         # to make model structure more clear, we don't use `for` statement in python.
         self.dark2 = nn.Sequential(
-            *self.make_group_layer(in_channels, num_blocks[0], stride=2)
+            *self.make_group_layer(in_channels, num_blocks[0], stride=2)#2번반복
         )
         in_channels *= 2  # 128
         self.dark3 = nn.Sequential(
-            *self.make_group_layer(in_channels, num_blocks[1], stride=2)
+            *self.make_group_layer(in_channels, num_blocks[1], stride=2)#8번반복
         )
         in_channels *= 2  # 256
         self.dark4 = nn.Sequential(
-            *self.make_group_layer(in_channels, num_blocks[2], stride=2)
+            *self.make_group_layer(in_channels, num_blocks[2], stride=2)#8번반복
         )
         in_channels *= 2  # 512
 
         self.dark5 = nn.Sequential(
-            *self.make_group_layer(in_channels, num_blocks[3], stride=2),
-            *self.make_spp_block([in_channels, in_channels * 2], in_channels * 2),
+            *self.make_group_layer(in_channels, num_blocks[3], stride=2),#4번반복
+            *self.make_spp_block([in_channels, in_channels * 2], in_channels * 2),#추출
         )
 
     def make_group_layer(self, in_channels: int, num_blocks: int, stride: int = 1):
