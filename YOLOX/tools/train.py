@@ -85,7 +85,7 @@ def make_parser():
         "--logger",
         type=str,
         help="Logger to be used for metrics",
-        default="tensorboard"
+        default="wandb"
     )
     parser.add_argument(
         "opts",
