@@ -192,6 +192,10 @@ class WandbLogger(object):
         else:
             self.run.log(metrics)
 
+    def log_scatter_plot(self, data, columns):
+        table = self.wandb.Table(data=data, columns=columns)
+        self.wandb.log({"Params-GFlops Scatter Plot": self.wandb.plot.scatter(table, "Params", "GFlops", title="Params-GFlops Scatter Plot")})
+
     def save_checkpoint(self, save_dir, model_name, is_best):
         """
         Args:
