@@ -6,6 +6,7 @@ import datetime
 import os
 import time
 from loguru import logger
+from torchinfo import summary
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -138,6 +139,10 @@ class Trainer:
             "Model Summary: {}".format(model_info[0])
         )
 
+        logger.info(
+            summary(model, (16, 3, 64, 64))
+        )
+
         model.to(self.device)
 
         # solver related init
@@ -188,13 +193,15 @@ class Trainer:
                         wandb_params.update({k.lstrip("wandb")[1:]: v})
                 wandb_configs = vars(self.exp)
                 wandb_configs = dict(wandb_configs, **{"Params": str(model_info[1]), "Gflops": str(model_info[2])})
-                wandb_params = dict({"name":wandb_configs["name"]},**wandb_params)
+                wandb_params = dict({"name": wandb_configs["name"]}, **wandb_params)
                 self.wandb_logger = WandbLogger(config=wandb_configs, **wandb_params)
             else:
                 raise ValueError("logger must be either 'tensorboard' or 'wandb'")
 
         logger.info("Training start...")
         logger.info("\n{}".format(model))
+
+        self.wandb_logger.log_scatter_plot([[model_info[1], model_info[2]]], ["Params", "GFlops"])
 
     def after_train(self):
         logger.info(
