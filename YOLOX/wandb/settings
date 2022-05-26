@@ -1,5 +1,5 @@
 [default]
 entity = next_level
-project = yolox_nano
+project = YOLOX
 base_url = https://api.wandb.ai
 

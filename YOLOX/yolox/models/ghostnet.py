@@ -96,7 +96,8 @@ class _GhostNet(nn.Module):
             [24, 3, 24, 72, 1, False], [24, 3, 40, 72, 2, True]
         ]
         layer3 = [ 
-            [40, 3, 40, 120, 1, True], [40, 3, 80, 240, 4, False]
+            #[40, 3, 40, 120, 1, True], [40, 3, 80, 240, 4, False] #245
+            [40, 3, 40, 120, 1, True], [40, 3, 80, 240, 2, False] #234
         ]
         layer4 = [ 
             [80, 3, 80, 200, 1, False], [80, 3, 80, 184, 1, False],
@@ -104,7 +105,7 @@ class _GhostNet(nn.Module):
             [112, 3, 112, 672, 1, True], [112, 3, 160, 672, 2, True]
         ]
         layer5 = [ 
-            [160, 3, 160, out_channels, 1, False], [160, 3, 160, out_channels, 2, True],
+            [160, 3, 160, 960, 1, False], [160, 3, 160, 960, 2, True],
             #[160, 3, 160, out_channels, 1, False], [160, 3, 160, out_channels, 2, True]
         ]
 
