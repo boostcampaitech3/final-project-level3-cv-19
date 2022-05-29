@@ -55,7 +55,8 @@ class Trainer:
         # data/dataloader related attr
         self.data_type = torch.float16 if args.fp16 else torch.float32
         self.input_size = exp.input_size
-        self.best_ap = 0
+        self.best_ap50 = 0
+        self.best_ap50_95 = 0
 
         # metric record
         self.meter = MeterBuffer(window_size=exp.print_interval)
@@ -201,14 +202,23 @@ class Trainer:
         logger.info("Training start...")
         logger.info("\n{}".format(model))
 
-        self.wandb_logger.log_scatter_plot([[model_info[1], model_info[2]]], ["Params", "GFlops"])
+        self.wandb_logger.log_scatter_plot(
+            [[model_info[1], model_info[2]]], 
+            ["Params", "GFlops"], 
+            "Params-GFlops Scatter Plot"
+        )
 
     def after_train(self):
         logger.info(
-            "Training of experiment is done and the best AP is {:.2f}".format(self.best_ap * 100)
+            "Training of experiment is done and the AP50 is {:.2f}, and the best AP50_95 is {:.2f}".format(self.best_ap50 * 100, self.best_ap50_95 * 100)
         )
         if self.rank == 0:
             if self.args.logger == "wandb":
+                self.wandb_logger.log_scatter_plot(
+                    [[self.best_ap50 * 100, self.best_ap50_95 * 100]], 
+                    ["Best AP50", "Best AP50_95"], 
+                    "Best AP50-AP50_95"
+                )
                 self.wandb_logger.finish()
 
     def before_epoch(self):
@@ -302,7 +312,7 @@ class Trainer:
             # resume the model/optimizer state dict
             model.load_state_dict(ckpt["model"])
             self.optimizer.load_state_dict(ckpt["optimizer"])
-            self.best_ap = ckpt.pop("best_ap", 0)
+            self.best_ap50_95 = ckpt.pop("best_ap50_95", 0)
             # resume the training states variables
             start_epoch = (
                 self.args.start_epoch - 1
@@ -338,8 +348,10 @@ class Trainer:
                 evalmodel, self.evaluator, self.is_distributed
             )
 
-        update_best_ckpt = ap50_95 > self.best_ap
-        self.best_ap = max(self.best_ap, ap50_95)
+        update_best_ckpt = ap50_95 > self.best_ap50_95
+        self.best_ap50_95 = max(self.best_ap50_95, ap50_95)
+        if update_best_ckpt:
+            self.best_ap50 = ap50
 
         if self.rank == 0:
             if self.args.logger == "tensorboard":
@@ -366,7 +378,7 @@ class Trainer:
                 "start_epoch": self.epoch + 1,
                 "model": save_model.state_dict(),
                 "optimizer": self.optimizer.state_dict(),
-                "best_ap": self.best_ap,
+                "best_ap50_95": self.best_ap50_95,
             }
             save_checkpoint(
                 ckpt_state,
