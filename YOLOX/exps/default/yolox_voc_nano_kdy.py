@@ -27,10 +27,12 @@ class Exp(MyExp):
         self.mosaic_prob = 0.5
         self.enable_mixup = False
 
+        self.max_epoch = 500
+
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
 
         #self.act = "relu"
-        self.name = "yolox_voc_nano"
+        self.name = "ghostnet_backboneL235_e500"
         self.seed = 2000
 
     def get_model(self, sublinear=False):

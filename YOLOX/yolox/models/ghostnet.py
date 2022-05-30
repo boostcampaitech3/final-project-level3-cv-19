@@ -97,23 +97,27 @@ class _GhostNet(nn.Module):
         ]
         layer3 = [ 
             #[40, 3, 40, 120, 1, True], [40, 3, 80, 240, 4, False] #245
-            [40, 3, 40, 120, 1, True], [40, 3, 80, 240, 2, False] #234
+            [40, 3, 40, 120, 1, True], [40, 3, 40, 120, 1, True],[40, 3, 40, 120, 1, True],[40, 3, 80, 240, 2, False] #234
         ]
         layer4 = [ 
-            [80, 3, 80, 200, 1, False], [80, 3, 80, 184, 1, False],
-            [80, 3, 80, 184, 1, False], [80, 3, 112, 480, 1, True],
-            [112, 3, 112, 672, 1, True], [112, 3, 160, 672, 2, True]
+            # [80, 3, 80, 200, 1, False], [80, 3, 80, 184, 1, False],
+            # [80, 3, 80, 184, 1, False], [80, 3, 112, 480, 1, True],
+            # [112, 3, 112, 672, 1, True], [112, 3, 160, 672, 2, True]
+
+            [80, 3, 80, 200, 1, False], [80, 3, 80, 200, 1, False], [80, 3, 80, 184, 1, False], [80, 3, 80, 184, 1, False],
+            [80, 3, 80, 184, 1, False], [80, 3, 80, 184, 1, False], [80, 3, 112, 480, 1, True], [112, 3, 112, 480, 1, True],
+            [112, 3, 112, 672, 1, True], [112, 3, 112, 672, 1, True], [112, 3, 160, 672, 1, True] , [160, 3, 160, 800, 2, True]
         ]
-        layer5 = [ 
-            [160, 3, 160, 960, 1, False], [160, 3, 160, 960, 2, True],
-            #[160, 3, 160, out_channels, 1, False], [160, 3, 160, out_channels, 2, True]
-        ]
+        # layer5 = [ 
+        #     [160, 3, 160, 960, 1, False], [160, 3, 160, 960, 2, True],
+        #     #[160, 3, 160, out_channels, 1, False], [160, 3, 160, out_channels, 2, True]
+        # ]
 
         self.layer1 = self.make_layer(layer1)
         self.layer2 = self.make_layer(layer2)
         self.layer3 = self.make_layer(layer3)
         self.layer4 = self.make_layer(layer4)
-        self.layer5 = self.make_layer(layer5)
+        #self.layer5 = self.make_layer(layer5)
         
 
     def forward(self, input):
@@ -127,8 +131,8 @@ class _GhostNet(nn.Module):
         outputs["dark3"] = s3
         s4 = self.layer4(s3)
         outputs["dark4"] = s4
-        s5 = self.layer5(s4)
-        outputs["dark5"] = s5
+        # s5 = self.layer5(s4)
+        # outputs["dark5"] = s5
         return {k: v for k, v in outputs.items() if k in self.out_features}
 
     def make_layer(self, layers_configs):
