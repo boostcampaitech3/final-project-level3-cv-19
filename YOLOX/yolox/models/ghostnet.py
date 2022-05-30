@@ -10,135 +10,205 @@ import torch.nn.functional as F
 from .network_blocks import Bottleneck, SE_Block, get_activation, Focus
 
 
+__all__ = ['ghost_net']
 
-class DepthwiseConvBn(nn.Module):
-    def __init__(self, in_channels, kernels_per_layer, kernel_size=3, stride=1, act="silu"):
-        super().__init__()
-        self.depthwise = nn.Conv2d(in_channels, in_channels * kernels_per_layer,
-                                   kernel_size=kernel_size, padding=1, groups=in_channels, stride=stride)
-        self.bn = nn.BatchNorm2d(in_channels * kernels_per_layer)
-        self.act = get_activation(act, inplace=True)
+def _make_divisible(v, divisor, min_value=None):
+    """
+    This function is taken from the original tf repo.
+    It ensures that all layers have a channel number that is divisible by 8
+    It can be seen here:
+    https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.py
+    """
+    if min_value is None:
+        min_value = divisor
+    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
+    # Make sure that round down does not go down by more than 10%.
+    if new_v < 0.9 * v:
+        new_v += divisor
+    return new_v
+
+
+class SELayer(nn.Module):
+    def __init__(self, channel, reduction=4):
+        super(SELayer, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+                nn.Linear(channel, channel // reduction),
+                nn.ReLU(inplace=True),
+                nn.Linear(channel // reduction, channel),
+        )
 
     def forward(self, x):
-        return self.act(self.bn(self.depthwise(x)))
+        b, c, _, _ = x.size()
+        y = self.avg_pool(x).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+        y = torch.clamp(y, 0, 1)
+        return x * y
 
 
-class Conv2dBnAct(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=2, act="silu"):
-        super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels,
-                                   kernel_size=kernel_size, stride=stride)
-        self.bn = nn.BatchNorm2d(out_channels)
-        self.act = get_activation(act, inplace=True)
+def depthwise_conv(inp, oup, kernel_size=3, stride=1, relu=False):
+    return nn.Sequential(
+        nn.Conv2d(inp, oup, kernel_size, stride, kernel_size//2, groups=inp, bias=False),
+        nn.BatchNorm2d(oup),
+        nn.ReLU(inplace=True) if relu else nn.Sequential(),
+    )
+
+class GhostModule(nn.Module):
+    def __init__(self, inp, oup, kernel_size=1, ratio=2, dw_size=3, stride=1, relu=True):
+        super(GhostModule, self).__init__()
+        self.oup = oup
+        init_channels = math.ceil(oup / ratio)
+        new_channels = init_channels*(ratio-1)
+
+        self.primary_conv = nn.Sequential(
+            nn.Conv2d(inp, init_channels, kernel_size, stride, kernel_size//2, bias=False),
+            nn.BatchNorm2d(init_channels),
+            nn.ReLU(inplace=True) if relu else nn.Sequential(),
+        )
+
+        self.cheap_operation = nn.Sequential(
+            nn.Conv2d(init_channels, new_channels, dw_size, 1, dw_size//2, groups=init_channels, bias=False),
+            nn.BatchNorm2d(new_channels),
+            nn.ReLU(inplace=True) if relu else nn.Sequential(),
+        )
 
     def forward(self, x):
-        out = self.conv(x)
-        out  = self.bn(out)
-        out = self.act(out)
-        return out
+        x1 = self.primary_conv(x)
+        x2 = self.cheap_operation(x1)
+        out = torch.cat([x1,x2], dim=1)
+        return out[:,:self.oup,:,:]
 
 
-# gmodule1 -> DepthwiseConvBn || SE_Block -> gmodule2
-class G_bneck(nn.Module):
-    def __init__(self, in_channels, kernel_size, out_channels, exp, stride, SE, ratio=2):
-        super(G_bneck, self).__init__()
-        self.stride=stride
-        self.use_se = SE
-        self.gmodule1 = G_module(in_channels=in_channels, kernel_size=1, out_channels=exp, stride=1)
-        self.gmodule2 = G_module(in_channels=exp, kernel_size=1, out_channels=out_channels, stride=1)
-        
-        #params reduce possible
-        self.dconv = DepthwiseConvBn(in_channels=exp, kernels_per_layer=1, kernel_size=3, stride=self.stride)
-        self.se_block = SE_Block(in_channels=exp ,internal_neurons=16)
+class GhostBottleneck(nn.Module):
+    def __init__(self, inp, hidden_dim, oup, kernel_size, stride, use_se): 
+        super(GhostBottleneck, self).__init__()
+        assert stride in [1, 2]
 
-    def forward(self, input):
-        output = self.gmodule1(input)
-        if self.stride == 2:
-            output = self.dconv(output)
-        if self.use_se:
-            output = self.se_block(output)
-        output = self.gmodule2(output)
-        return output 
+        self.conv = nn.Sequential(
+            # pw
+            GhostModule(inp, hidden_dim, kernel_size=1, relu=True),
+            # dw
+            depthwise_conv(hidden_dim, hidden_dim, kernel_size, stride, relu=False) if stride==2 else nn.Sequential(),
+            # Squeeze-and-Excite
+            SELayer(hidden_dim) if use_se else nn.Sequential(),
+            # pw-linear
+            GhostModule(hidden_dim, oup, kernel_size=1, relu=False),
+        )
 
+        if stride == 1 and inp == oup:
+            self.shortcut = nn.Sequential()
+        else:
+            self.shortcut = nn.Sequential(
+                depthwise_conv(inp, inp, kernel_size, stride, relu=False),
+                nn.Conv2d(inp, oup, 1, 1, 0, bias=False),
+                nn.BatchNorm2d(oup),
+            )
 
-class G_module(nn.Module):
-    def __init__(self, in_channels, kernel_size, out_channels, stride, ratio=2):
-        super(G_module, self).__init__()
-        self.init_channels = math.ceil(out_channels//ratio)
-        self.conv = Conv2dBnAct(in_channels=in_channels, out_channels=self.init_channels, kernel_size=kernel_size, stride=stride)
-        self.dconv = DepthwiseConvBn(self.init_channels, kernels_per_layer=1, kernel_size=3, stride=stride)
-
-    def forward(self, input):
-        output = self.conv(input)
-        depth_output = self.dconv(output)
-        output = torch.cat([output, depth_output], axis=1)
-        return output
+    def forward(self, x):
+        return self.conv(x) + self.shortcut(x)
 
 
-
-class _GhostNet(nn.Module):
-    def __init__(self, dep_mul, wid_mul, out_features=("dark2", "dark4", "dark5")):
-        super(_GhostNet, self).__init__()
+class GhostNet(nn.Module):
+    def __init__(self, cfgs, out_features, width_mult=1., ):
+        super(GhostNet, self).__init__()
+        # setting of inverted residual blocks
+        self.cfgs = cfgs
+        self.width_mult = width_mult
         self.out_features = out_features
+
+        # building first layer
+        self.output_channel = _make_divisible(16 * self.width_mult, 4)
+        self.layers = [nn.Sequential(
+            nn.Conv2d(3, self.output_channel, 3, 2, 1, bias=False),
+            nn.BatchNorm2d(self.output_channel),
+            nn.ReLU(inplace=True)
+        )]
+
+        self.input_channel = self.output_channel
         
-        out_channels = 320
-        base_channels = int(wid_mul * 64)  # 64
-        base_depth = max(round(dep_mul * 3), 1)  # 3
+        self.layer1 = self.make_layer(self.cfgs[0])
+        self.layers = []
+        self.layer2 = self.make_layer(self.cfgs[1])
+        self.layers = []
+        self.layer3 = self.make_layer(self.cfgs[2])   
+        self.layers = []
 
-        self.stem = Focus(3, base_channels, ksize=3, act="silu")
+        self._initialize_weights()
 
-        # config = in_channels, kernel_size, out_channels, exp, stride, SE
-        layer1 = [ 
-            [base_channels, 3, base_channels, base_channels, 1, False], 
-            [base_channels, 3, 24, 48, 2, False]
-        ]
-        layer2 = [
-            [24, 3, 24, 72, 1, False], [24, 3, 40, 72, 2, True]
-        ]
-        layer3 = [ 
-            #[40, 3, 40, 120, 1, True], [40, 3, 80, 240, 4, False] #245
-            [40, 3, 40, 120, 1, True], [40, 3, 40, 120, 1, True],[40, 3, 40, 120, 1, True],[40, 3, 80, 240, 2, False] #234
-        ]
-        layer4 = [ 
-            # [80, 3, 80, 200, 1, False], [80, 3, 80, 184, 1, False],
-            # [80, 3, 80, 184, 1, False], [80, 3, 112, 480, 1, True],
-            # [112, 3, 112, 672, 1, True], [112, 3, 160, 672, 2, True]
-
-            [80, 3, 80, 200, 1, False], [80, 3, 80, 200, 1, False], [80, 3, 80, 184, 1, False], [80, 3, 80, 184, 1, False],
-            [80, 3, 80, 184, 1, False], [80, 3, 80, 184, 1, False], [80, 3, 112, 480, 1, True], [112, 3, 112, 480, 1, True],
-            [112, 3, 112, 672, 1, True], [112, 3, 112, 672, 1, True], [112, 3, 160, 672, 1, True] , [160, 3, 160, 800, 2, True]
-        ]
-        # layer5 = [ 
-        #     [160, 3, 160, 960, 1, False], [160, 3, 160, 960, 2, True],
-        #     #[160, 3, 160, out_channels, 1, False], [160, 3, 160, out_channels, 2, True]
-        # ]
-
-        self.layer1 = self.make_layer(layer1)
-        self.layer2 = self.make_layer(layer2)
-        self.layer3 = self.make_layer(layer3)
-        self.layer4 = self.make_layer(layer4)
-        #self.layer5 = self.make_layer(layer5)
-        
-
-    def forward(self, input):
+    def forward(self, x):
         outputs = {}
-        stem_out = self.stem(input)
-        s1 = self.layer1(stem_out) #stage인데 기존 것과 같이쓰기위해 기존 형식을 이용
-        outputs["stem"] = s1
-        s2 = self.layer2(s1)
-        outputs["dark2"] = s2
-        s3 = self.layer3(s2)
-        outputs["dark3"] = s3
-        s4 = self.layer4(s3)
-        outputs["dark4"] = s4
-        # s5 = self.layer5(s4)
-        # outputs["dark5"] = s5
+        x1 = self.layer1(x) 
+        outputs["layer1"] = x1
+        x2 = self.layer2(x1) 
+        outputs["layer2"] = x2
+        x3 = self.layer3(x2)
+        outputs["layer3"] = x3
+
         return {k: v for k, v in outputs.items() if k in self.out_features}
 
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+
     def make_layer(self, layers_configs):
-        layers = []
-        for i, k, o, e, s, se in layers_configs:
-            layers.append(G_bneck(
-                in_channels=i, kernel_size=k, out_channels=o, exp=e, stride=s, SE=se
-            ))
-        return nn.Sequential(*layers)
+        block = GhostBottleneck
+        for k, exp_size, c, use_se, s in layers_configs: #kernel, exp_size, SEblock, stride
+            self.output_channel = _make_divisible(c * self.width_mult, 4)
+            hidden_channel = _make_divisible(exp_size * self.width_mult, 4)
+            self.layers.append(block(self.input_channel, hidden_channel, self.output_channel, k, s, use_se))
+            self.input_channel = self.output_channel
+        return nn.Sequential(*self.layers)
+
+
+def ghost_net(**kwargs):
+    """
+    Constructs a GhostNet model
+    """
+    layer1 = [
+        # k, t, c, SE, s 
+        [3,  16,  16, 0, 1],
+        [3,  48,  24, 0, 2],
+        [3,  72,  24, 0, 1],
+        [5,  72,  40, 1, 2],
+    ]
+    layer2 = [
+        [5, 120,  40, 1, 1],
+        [3, 240,  80, 0, 2],
+        [3, 200,  80, 0, 1],
+        [3, 184,  80, 0, 1], #('Params: 1.13M, Gflops: 1.03', 1.134999, 1.03222665)
+        [3, 184,  80, 0, 1], # 영향 거의 없는 Layer
+    ]
+    layer3 = [
+        # L3_rm5 case
+        [3, 480, 112, 1, 1], 
+        [3, 672, 160, 1, 2] # ('Params: 0.85M, Gflops: 0.94', 0.848335, 0.94373825)
+
+        # L3_rm4 case
+        # [3, 480, 112, 1, 1],
+        # [3, 672, 112, 1, 1],
+        # [5, 672, 160, 1, 2], # ('Params: 1.17M, Gflops: 1.08', 1.167871, 1.076669594)
+        
+        # L3_rm2 case
+        # [3, 480, 112, 1, 1],
+        # [3, 672, 112, 1, 1],
+        # [5, 672, 160, 1, 2],
+        # [5, 960, 160, 0, 1],
+        # [5, 960, 160, 1, 1], # ('Params: 1.95M, Gflops: 1.22', 1.951631, 1.224767674)
+        
+        # L3_full case
+        # [3, 480, 112, 1, 1],
+        # [3, 672, 112, 1, 1],
+        # [5, 672, 160, 1, 2],
+        # [5, 960, 160, 0, 1],
+        # [5, 960, 160, 1, 1],
+        # [5, 960, 160, 0, 1], 
+        # [5, 960, 160, 1, 1]  # ('Params: 2.74M, Gflops: 1.37', 2.735391, 1.372865754)
+    ]
+    cfgs = [
+        layer1, layer2, layer3
+    ]
+    return GhostNet(cfgs, **kwargs)

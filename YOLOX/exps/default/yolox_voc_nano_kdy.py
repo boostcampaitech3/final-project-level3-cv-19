@@ -27,7 +27,7 @@ class Exp(MyExp):
         self.mosaic_prob = 0.5
         self.enable_mixup = False
 
-        self.max_epoch = 500
+        self.max_epoch = 300
 
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
 
@@ -45,11 +45,8 @@ class Exp(MyExp):
         if "model" not in self.__dict__:
             from yolox.models import YOLOX, YOLOPAFPN_G, YOLOXHead
 
-            # in_channels = [160, 640, 640]
-            # in_features=("dark2", "dark4", "dark5")
-
             in_channels = [160, 320, 640]
-            in_features=("dark2", "dark3", "dark4")
+            in_features=("layer1", "layer2", "layer3")
 
             # NANO model use depthwise = True, which is main difference.
             backbone = YOLOPAFPN_G(

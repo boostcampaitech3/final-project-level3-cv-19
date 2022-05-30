@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 
 from .darknet import CSPDarknet
-from .ghostnet import _GhostNet
+from .ghostnet import ghost_net
 from .network_blocks import BaseConv, CSPLayer, DWConv
 
 
@@ -20,13 +20,13 @@ class YOLOPAFPN_G(nn.Module):
         self,
         depth=1.0,
         width=1.0,  
-        in_features=("dark2", "dark4", "dark5"),
+        in_features=("layer1", "layer2", "layer3"),
         in_channels=[1, 1, 1],
         depthwise=False,
         act="silu",
     ):# depth와 witdh 기준으로 모델이 구분됩니다. nano는 0.33,0.25네요. 따라서 model과 fpn구조도 input이 달라져서 고려해야합니다.
         super().__init__()
-        self.backbone = _GhostNet(depth, width, out_features=in_features)
+        self.backbone = ghost_net(out_features=in_features)
         self.in_features = in_features
         self.in_channels = in_channels
         Conv = DWConv if depthwise else BaseConv
