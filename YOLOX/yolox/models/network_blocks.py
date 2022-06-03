@@ -21,6 +21,12 @@ def get_activation(name="silu", inplace=True):
         module = nn.ReLU(inplace=inplace)
     elif name == "lrelu":
         module = nn.LeakyReLU(0.1, inplace=inplace)
+    elif name == "gelu":
+        module = nn.GELU()
+    elif name == "hardswish":
+        module = nn.Hardswish(inplace=inplace)
+    elif name == "mish":
+        module = nn.Mish(inplace=inplace)
     else:
         raise AttributeError("Unsupported act type: {}".format(name))
     return module
@@ -30,17 +36,18 @@ class BaseConv(nn.Module):
     """A Conv2d -> Batchnorm -> silu/leaky relu block"""
 
     def __init__(
-        self, in_channels, out_channels, ksize, stride, groups=1, bias=False, act="silu"
+        self, in_channels, out_channels, ksize, stride, dilation=1, groups=1, bias=False, act="silu"
     ):
         super().__init__()
         # same padding
-        pad = (ksize - 1) // 2
+        pad = (ksize - 1) // 2 + (dilation - 1)
         self.conv = nn.Conv2d(
             in_channels,
             out_channels,
             kernel_size=ksize,
             stride=stride,
             padding=pad,
+            dilation=dilation,
             groups=groups,
             bias=bias,
         )
@@ -55,15 +62,17 @@ class BaseConv(nn.Module):
 
 
 class DWConv(nn.Module):
-    """Depthwise Conv + Conv"""
+    """Depthwise Seperable Convolution"""
+    """Depthwise Conv + Pointwise Conv"""
 
-    def __init__(self, in_channels, out_channels, ksize, stride=1, act="silu"):
+    def __init__(self, in_channels, out_channels, ksize, stride=1, act="silu", dilation=1):
         super().__init__()
         self.dconv = BaseConv(
             in_channels,
             in_channels,
             ksize=ksize,
             stride=stride,
+            dilation=dilation,
             groups=in_channels,
             act=act,
         )
@@ -74,6 +83,52 @@ class DWConv(nn.Module):
     def forward(self, x):
         x = self.dconv(x)
         return self.pconv(x)
+
+
+class DWConv_2(nn.Module):
+    """Depthwise Convolution"""
+
+    def __init__(self, in_channels, out_channels, ksize, stride=1, act="silu", dilation=1):
+        super().__init__()
+        self.dconv = BaseConv(
+            in_channels,
+            out_channels,
+            ksize=ksize,
+            stride=stride,
+            dilation=dilation,
+            groups=in_channels,
+            act=act,
+        )
+
+    def forward(self, x):
+        return self.dconv(x)
+
+
+class GroupConv(nn.Module):
+    """Grouped Convolution"""
+
+    def __init__(self, in_channels, out_channels, ksize, stride=1, act="silu", dilation=1, bias=False):
+        super().__init__()
+        # same padding
+        pad = (ksize - 1) // 2 + (dilation - 1)
+        self.gconv = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=ksize,
+            stride=stride,
+            padding=pad,
+            dilation=dilation,
+            groups=8,
+            bias=bias,
+        )
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.act = get_activation(act, inplace=True)
+    
+    def forward(self, x):
+        return self.act(self.bn(self.gconv(x)))
+
+    def fuseforward(self, x):
+        return self.act(self.gconv(x))
 
 
 class Bottleneck(nn.Module):
@@ -172,7 +227,7 @@ class CSPLayer(nn.Module):
         module_list = [
             Bottleneck(
                 hidden_channels, hidden_channels, shortcut, 1.0, depthwise, act=act
-            ) # 이게 Resnet의 F(X) + x 입니다.
+            )
             for _ in range(n)
         ]
         self.m = nn.Sequential(*module_list)
@@ -188,9 +243,9 @@ class CSPLayer(nn.Module):
 class Focus(nn.Module):
     """Focus width and height information into channel space."""
 
-    def __init__(self, in_channels, out_channels, ksize=1, stride=1, act="silu"):
+    def __init__(self, in_channels, out_channels, ksize=1, dilation=1, stride=1, act="silu"):
         super().__init__()
-        self.conv = BaseConv(in_channels * 4, out_channels, ksize, stride, act=act)
+        self.conv = BaseConv(in_channels * 4, out_channels, ksize, stride, dilation, act=act)
 
     def forward(self, x):
         # shape of x (b,c,w,h) -> y(b,4c,w/2,h/2)
