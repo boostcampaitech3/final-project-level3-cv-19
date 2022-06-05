@@ -4,6 +4,7 @@
 
 import torch
 import torch.nn as nn
+import numpy as np
 
 
 class SiLU(nn.Module):
@@ -118,6 +119,7 @@ class GroupConv(nn.Module):
             stride=stride,
             padding=pad,
             dilation=dilation,
+            # groups=in_channels,
             groups=8,
             bias=bias,
         )
@@ -131,6 +133,99 @@ class GroupConv(nn.Module):
         return self.act(self.gconv(x))
 
 
+""" Mixed Depthwise Convolution Starts """
+
+def split_layer(total_channels, num_groups):
+    split = [int(np.ceil(total_channels / num_groups)) for _ in range(num_groups)]
+    split[num_groups - 1] += total_channels - sum(split)
+    return split
+
+
+class DepthwiseConv2D(nn.Module):
+    """Depthwise Conv for Mixed Depthwise Convolution"""
+
+    def __init__(self, in_channels, out_channels, ksize, stride=1, bias=False):
+        super().__init__()
+        padding = (ksize - 1) // 2
+
+        self.depthwise_conv = nn.Conv2d(
+            in_channels, 
+            out_channels,
+            kernel_size=ksize,
+            padding=padding,
+            stride=stride,
+            groups=in_channels,
+            bias=bias
+        )
+
+    def forward(self, x):
+        out = self.depthwise_conv(x)
+        return out
+
+
+class GroupConv2D(nn.Module):
+    """Group Conv for Mixed Depthwise Convolution"""
+
+    def __init__(self, in_channels, out_channels, ksize=1, n_chunks=1, bias=False):
+        super(GroupConv2D, self).__init__()
+        self.n_chunks = n_chunks
+        self.split_in_channels = split_layer(in_channels, n_chunks)
+        split_out_channels = split_layer(out_channels, n_chunks)
+
+        if n_chunks == 1:
+            self.group_conv = nn.Conv2d(in_channels, out_channels, kernel_size=ksize, bias=bias)
+        else:
+            self.group_layers = nn.ModuleList()
+            for idx in range(n_chunks):
+                self.group_layers.append(nn.Conv2d(
+                    self.split_in_channels[idx], 
+                    split_out_channels[idx], 
+                    kernel_size=ksize,
+                    bias=bias
+                ))
+
+    def forward(self, x):
+        if self.n_chunks == 1:
+            return self.group_conv(x)
+        else:
+            split = torch.split(x, self.split_in_channels, dim=1)
+            out = torch.cat([layer(s) for layer, s in zip(self.group_layers, split)], dim=1)
+            return out
+
+
+class MDConv(nn.Module):
+    """Mixed Depthwise Convolution"""
+
+    def __init__(self, in_channels, out_channels, n_chunks, stride=1, bias=False):
+        super(MDConv, self).__init__()
+        self.n_chunks = n_chunks
+        self.split_in_channels = split_layer(in_channels, n_chunks)
+        self.split_out_channels = split_layer(out_channels, n_chunks)
+
+        self.layers = nn.ModuleList()
+        for idx in range(self.n_chunks):
+            ksize = 2 * idx + 3
+            self.layers.append(
+                DepthwiseConv2D(
+                    self.split_in_channels[idx],
+                    self.split_out_channels[idx],
+                    ksize=ksize,
+                    stride=stride,
+                    bias=bias
+                )
+            )
+        
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.act = get_activation("silu", inplace=True)
+
+    def forward(self, x):
+        split = torch.split(x, self.split_in_channels, dim=1)
+        out = torch.cat([layer(s) for layer, s in zip(self.layers, split)], dim=1)
+        return self.act(self.bn(out))
+        
+""" Mixed Depthwise Convolution Ends """
+
+
 class Bottleneck(nn.Module):
     # Standard bottleneck
     def __init__(
@@ -141,12 +236,21 @@ class Bottleneck(nn.Module):
         expansion=0.5,
         depthwise=False,
         act="silu",
+        n_chunks=1,
+        mdconv=False
     ):
         super().__init__()
         hidden_channels = int(out_channels * expansion)
         Conv = DWConv if depthwise else BaseConv
+        # Conv = DWConv_2 if depthwise else BaseConv
+        # Conv = GroupConv if depthwise else BaseConv
+        self.modified_ksize = 3
         self.conv1 = BaseConv(in_channels, hidden_channels, 1, stride=1, act=act)
-        self.conv2 = Conv(hidden_channels, out_channels, 3, stride=1, act=act)
+        if mdconv:
+            self.conv2 = MDConv(hidden_channels, out_channels, n_chunks, 1)
+        else:
+            self.conv2 = Conv(hidden_channels, out_channels, self.modified_ksize, stride=1, act=act)
+
         self.use_add = shortcut and in_channels == out_channels
 
     def forward(self, x):
@@ -211,6 +315,8 @@ class CSPLayer(nn.Module):
         expansion=0.5,
         depthwise=False,
         act="silu",
+        n_chunks=1,
+        mdconv=False
     ):
         """
         Args:
@@ -226,7 +332,7 @@ class CSPLayer(nn.Module):
         self.conv3 = BaseConv(2 * hidden_channels, out_channels, 1, stride=1, act=act)
         module_list = [
             Bottleneck(
-                hidden_channels, hidden_channels, shortcut, 1.0, depthwise, act=act
+                hidden_channels, hidden_channels, shortcut, 1.0, depthwise, act=act, n_chunks=n_chunks, mdconv=mdconv
             )
             for _ in range(n)
         ]
