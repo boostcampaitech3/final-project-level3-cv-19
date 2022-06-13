@@ -24,6 +24,7 @@
 
 ## 📆 프로젝트 수행 절차 및 방법
 <img src='./src/image_2.png' />
+<br />
 
 ## 📃 프로젝트 기본 조건
 #### YOLOX-nano / architecture
@@ -49,6 +50,8 @@
 |Model|mAP val @.5|mAP val @.5:.95| Params(M)|FLOPs(G)|
 | :-: | :-: | :-: | :-: | :-: |
 |YOLOX-nano|50.95|28.47|0.91|1.08|
+
+<br />
 
 ## 💻 프로젝트 수행 결과
 #### 최종 스코어
@@ -115,6 +118,8 @@
 |yolox_voc_nano|28.47|50.95|0.91|1.08|
 |FPN_Modified (ours)|29.56 (+1.11%)|51.89 (+0.94%)|0.91 (-)|1.06 (-2.1%)|
 
+<br />
+
 ## 💡 Insight
 #### Pruning
 - Pruning은 기존에 pretrained된 모델을 pruning후 재학습시키는 것을 반복.
@@ -131,6 +136,8 @@
 - 낮은 Learning Rate로 Local Maximum을 벗어나지 못하고 진동.
 - 결국 충분한 학습이 되지 않아서 이런 현상 발생.
 <img src='./src/image_14.png' />
+
+<br />
 
 ## 📔 자체 평가 의견
 - 계획 대비 달성도
