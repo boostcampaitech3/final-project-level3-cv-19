@@ -109,9 +109,10 @@
 - 이를 이용해 Head에 3개의 Output을 전달함.
 - 하지만 과정중 Dark2의 정보가 소실됨.
     - EfficientDet 논문에서 더 많은 레이어의 정보를 전달 할수록 성능이 좋아짐.
-    <img src='./src/image_9.png' height='500' />
+<img src='./src/image_9.png' height='500' />
+    
 - Dark2의 정보를 더해주어 성능 향상을 꾀함.
-    <img src='./src/image_10.png' height='500' />
+<img src='./src/image_10.png' height='500' />
 
 |Model|mAP val @.5:.95|mAP val @.5| Params(M)|FLOPs(G)|
 | :-: | :-: | :-: | :-: | :-: |
