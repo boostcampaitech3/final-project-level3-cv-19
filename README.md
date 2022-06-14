@@ -17,7 +17,7 @@
 ## 📝 프로젝트 팀 구성 및 역할
 - `김대유` &nbsp; Backbone 변경 및 Conv 블록 실험   
 - `권혁산` &nbsp; 프로젝트 Leading, Pruning, Neck 구조 변형 
-- `정효재` &nbsp; 
+- `정효재` &nbsp; Baseline분석, BaseConv 변형 실험
 - `이상진` &nbsp; BaseConv 변형하여 실험 진행
 - `김찬민` &nbsp; Darknet, base conv 변형 실험  
 <br />
