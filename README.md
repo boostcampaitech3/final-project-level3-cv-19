@@ -2,12 +2,12 @@
 <br />
 
 ## 🔍 프로젝트 개요
-#### 목적
+### 목적
 - 모델 구조 변형을 통한 YOLOX-nano의 정확도(mAP) 개선
-#### 활용 장비 및 재료
+### 활용 장비 및 재료
 - 개발 환경 : Aistages server(Tesla v100), VScode, Jupyter NoteBook
 - 협업 Tools : Git, GitHub, Wandb, Notion
-#### 데이터셋 통계
+### 데이터셋 통계
 - [Pascal VOC 2007](http://host.robots.ox.ac.uk/pascal/VOC/voc2007/) (20가지 클래스)
 - Training set : 5,011장 (VOC 2007 trainval)
 - Validaton set : 4,952장 (VOC 2007 test)
@@ -27,7 +27,7 @@
 <br />
 
 ## 📃 프로젝트 기본 조건
-#### YOLOX-nano / architecture
+### YOLOX-nano / architecture
 - 기본적으로 1 stage detector 구조
 - Input – Backbone – Neck – Dense prediction
 - Input image가 darknet53의 backbone을 통해 feature map 추출
@@ -38,7 +38,7 @@
 <img src='./src/image_4.png' />
 <br />
 
-#### YOLOX-nano / Base score
+### YOLOX-nano / Base score
 - 실제 성능
 
 |Model|mAP val @.5|mAP val @.5:.95| Params(M)|FLOPs(G)|
@@ -54,7 +54,7 @@
 <br />
 
 ## 💻 프로젝트 수행 결과
-#### 최종 스코어
+### 최종 스코어
 - 적용 기법
     - Vanilla depthwise convolution 사용
     - Kernel size 조정 
@@ -66,7 +66,9 @@
 |yolox_voc_nano|28.47|50.95|0.91|1.08|
 |Final (ours)|32.80 (+4.33%)|53.65 (+2.70%)|0.86 (-5.5%)|1.08 (-)|
 
-#### Backbone
+<br />
+
+### Backbone
 - GhostNet
     - Feature Map 중복(Redundancy)에 대한 연산을 줄이는 방법을 제안
     - Ghost Feature(중복 피쳐)를 Linear transformation을 통해서 만드는 방법을 사용하여 기존 Conv 연산보다 빠르게 생성
@@ -79,7 +81,9 @@
     - Stride = 1이면 왼쪽 형태로 Stride = 2이면 오른쪽 형태로 구성
     <img src='./src/image_7.png' />
 
-#### Depthwise Convolution
+<br />
+
+### Depthwise Convolution
 - 기존의 vanilla depthwise convolution + pointwise convolution인 depthwise seperable convolution을 vanilla depthwise convolution으로 교체
 - Params는 0.91에서 0.68, GFlops는 1.08에서 0.83으로 줄어드는 효과
 - 줄어든 params와 gflops에서 이득을 보기 위하여 backbone, neck의 convolution 연산의 커널 사이즈를 3x3에서 7x7로 변경
@@ -91,7 +95,9 @@
 |yolox_voc_nano|28.47|50.95|0.91|1.08|
 |DWConv (ours)|31.68 (+3.21%)|53.65 (+3.15%)|0.88 (-3.3%)|1.08 (-)|
 
-#### Mixed Depthwise Convolution
+<br />
+
+### Mixed Depthwise Convolution
 - 커널의 사이즈를 키우면 성능이 올라가는건 이미 다양한 연구에서 입증된 결과
 - High-resolution pattern 학습을 위한 큰 사이즈의 커널과 low-resolution pattern 학습을 위한 작은 사이즈의 커널 모두 사용하여 학습을 시킬 수 있는 mixed depthwise convolution을 사용
 <img src='./src/image_8.png' />
@@ -103,7 +109,9 @@
 |yolox_voc_nano|28.47|50.95|0.91|1.08|
 |MDConv (ours)|31.53 (+3.06%)|52.86 (+2.36%)|0.90 (-1.1%)|1.05 (-3.1%)|
 
-#### FPN
+<br />
+
+### FPN
 - YOLOX-nano 모델은 PAFPN을 NECK으로 사용.
 - Backbone은 PAFPN에 Dark3,4,5 레이어의 Output을 전달.
 - 이를 이용해 Head에 3개의 Output을 전달함.
@@ -122,14 +130,14 @@
 <br />
 
 ## 💡 Insight
-#### Pruning
+### Pruning
 - Pruning은 기존에 pretrained된 모델을 pruning후 재학습시키는 것을 반복.
 <img src='./src/image_11.png' />
 
 - Pruning 한 모델과 다시 학습시킨 기본 모델의 성능차가 거의 없음을 확인 할 수 있었음.
 <img src='./src/image_12.png' />
 
-#### Learning Rate
+### Learning Rate
 - Nota사에서 제공한 Pre-trained.pth파일을 이용해 재학습시에 성능이 10% 향상
 - Epoch 끝부분에서 mAP Score가 진동하면 학습이 끝난 것인가 → No!
 <img src='./src/image_13.png' />
